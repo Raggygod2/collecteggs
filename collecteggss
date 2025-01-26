@@ -1,36 +1,95 @@
-local player = game.Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
-local function teleportEgg(egg)
-    if egg and egg:IsA("Part") then
-        egg.CFrame = character.HumanoidRootPart.CFrame
-    end
+-- Create ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "EggTeleportGui"
+screenGui.ResetOnSpawn = false -- So it won't disappear on respawn (optional)
+screenGui.Parent = playerGui
+
+-- Create main frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 200, 0, 100)
+mainFrame.Position = UDim2.new(0.5, -100, 0.5, -50)
+mainFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+mainFrame.BorderSizePixel = 2
+mainFrame.Active = true  -- required for dragging
+mainFrame.Draggable = true  -- basic built-in dragging
+mainFrame.Parent = screenGui
+
+-- Create toggle button
+local toggleButton = Instance.new("TextButton")
+toggleButton.Name = "ToggleButton"
+toggleButton.Size = UDim2.new(0, 180, 0, 40)
+toggleButton.Position = UDim2.new(0, 10, 0, 10)
+toggleButton.BackgroundColor3 = Color3.fromRGB(80, 170, 80)
+toggleButton.Text = "Enable Teleport"
+toggleButton.Parent = mainFrame
+
+-- Create close button
+local closeButton = Instance.new("TextButton")
+closeButton.Name = "CloseButton"
+closeButton.Size = UDim2.new(0, 180, 0, 30)
+closeButton.Position = UDim2.new(0, 10, 0, 60)
+closeButton.BackgroundColor3 = Color3.fromRGB(170, 80, 80)
+closeButton.Text = "Close"
+closeButton.Parent = mainFrame
+
+-- Variable to track if teleporting is enabled
+local teleporting = false
+
+-- Function to start teleporting
+local function TeleportToAllEggs()
+	teleporting = true
+	toggleButton.Text = "Disable Teleport"
+	
+	-- Reference to the folder: workspace.Eggs.Eggs
+	local eggsFolder = workspace:WaitForChild("Eggs"):WaitForChild("Eggs")
+
+	-- Iterate over all children in eggsFolder
+	for _, eggModel in ipairs(eggsFolder:GetChildren()) do
+		-- If teleporting was turned off mid-way, break the loop
+		if not teleporting then
+			break
+		end
+		
+		-- Ensure this is a Model, and it has a part named "Egg"
+		if eggModel:IsA("Model") and eggModel:FindFirstChild("Egg") then
+			local eggPart = eggModel.Egg
+			local character = player.Character
+			if character and character:FindFirstChild("HumanoidRootPart") then
+				-- Teleport the player a little above the egg to avoid clipping
+				character.HumanoidRootPart.CFrame = eggPart.CFrame + Vector3.new(0, 3, 0)
+				
+				-- Small delay so the player doesn't instantly skip all eggs
+				wait(1)
+			end
+		end
+	end
+	
+	-- After finishing, set teleporting to false if we didn't stop mid-way
+	teleporting = false
+	toggleButton.Text = "Enable Teleport"
 end
 
-local function processEggs()
-    for _, model in pairs(game.Workspace.Eggs.Eggs:GetChildren()) do
-        if model.Name == "ClassicEgg" then
-            local egg = model:FindFirstChild("Egg")
-            if egg then
-                teleportEgg(egg)
-            end
-        end
-    end
-end
-
-game.Workspace.Eggs.Eggs.ChildAdded:Connect(function(model)
-    if model.Name == "ClassicEgg" then
-        model.ChildAdded:Connect(function(egg)
-            if egg.Name == "Egg" then
-                teleportEgg(egg)
-            end
-        end)
-    end
+-- Toggle button logic
+toggleButton.MouseButton1Click:Connect(function()
+	if teleporting then
+		-- If it's currently running, disable it
+		teleporting = false
+		toggleButton.Text = "Enable Teleport"
+	else
+		-- Start teleporting to all eggs
+		TeleportToAllEggs()
+	end
 end)
 
-processEggs()
-
-while true do
-    wait(0.1)
-    character = player.Character or player.CharacterAdded:Wait()
-end
+-- Close button logic
+closeButton.MouseButton1Click:Connect(function()
+	-- Disable teleporting first
+	teleporting = false
+	-- Remove the GUI
+	screenGui:Destroy()
+end)
