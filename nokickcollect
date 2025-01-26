@@ -40,7 +40,8 @@ closeButton.Parent = mainFrame
 
 ---------------------------------------------------------------------------- 
 -- 2) Main logic: Using fireclickdetector() to collect eggs
---    + Now also teleporting below each egg at ClickDetector.MaxActivationDistance
+--    + Teleporting to eggs, looping continuously.
+--    + If no eggs remain, we loop-teleport below the last egg's position.
 ---------------------------------------------------------------------------- 
 local collecting = false
 
@@ -48,41 +49,61 @@ local function collectEggs()
 	collecting = true
 	toggleButton.Text = "Disable"
 	
-	-- Reference: workspace.Eggs.Eggs
+	-- Reference to eggs folder
 	local eggsFolder = workspace:WaitForChild("Eggs"):WaitForChild("Eggs")
 	
+	-- Get the player's character & HumanoidRootPart
 	local character = player.Character or player.CharacterAdded:Wait()
 	local hrp = character:WaitForChild("HumanoidRootPart")
 	
-	-- Loop over the children (egg Models)
-	for _, eggModel in ipairs(eggsFolder:GetChildren()) do
-		if not collecting then break end -- Stop if disabled mid-way
+	-- We'll store the last egg's position & distance so we can
+	-- keep teleporting there if no eggs remain.
+	local lastEggPosition
+	local lastEggDistance = 10 -- Default just in case.
 
-		-- Find a ClickDetector inside the model
-		local clickDetector = eggModel:FindFirstChild("ClickDetector")
-		if clickDetector and clickDetector:IsA("ClickDetector") then
-			
-			-- Teleport below the egg at the maximum activation distance
-			local part = eggModel.PrimaryPart or eggModel:FindFirstChildWhichIsA("BasePart")
-			if part then
-				local maxDistance = clickDetector.MaxActivationDistance
-				local eggPos = part.Position
-				-- Teleport the player
-				hrp.CFrame = CFrame.new(eggPos - Vector3.new(0, maxDistance + 0.1, 0))
-				
-				-- Small delay to ensure the server registers the new position 
-				wait(0.15)
+	-- Continuous loop while "collecting" is true
+	while collecting do
+		-- Get the current list of egg models
+		local eggModels = eggsFolder:GetChildren()
+
+		if #eggModels > 0 then
+			-- If we have eggs, loop over them and collect
+			for _, eggModel in ipairs(eggModels) do
+				if not collecting then break end  -- stop if disabled
+
+				local clickDetector = eggModel:FindFirstChild("ClickDetector")
+				if clickDetector and clickDetector:IsA("ClickDetector") then
+					
+					local part = eggModel.PrimaryPart or eggModel:FindFirstChildWhichIsA("BasePart")
+					if part then
+						-- Teleport below the egg at (MaxActivationDistance + 0.1)
+						local maxDistance = clickDetector.MaxActivationDistance
+						lastEggDistance = maxDistance + 0.1
+						
+						local eggPos = part.Position
+						lastEggPosition = eggPos
+						
+						hrp.CFrame = CFrame.new(eggPos - Vector3.new(0, lastEggDistance, 0))
+						wait(0.15)  -- Small delay so server registers your position
+					end
+
+					fireclickdetector(clickDetector)
+					wait(0.01)  -- Short delay between clicks
+				end
 			end
-			
-			-- "Click" it locally
-			fireclickdetector(clickDetector)
-			
-			-- Short delay between each click (tweak if needed)
-			wait(0.01)
+		else
+			-- NO eggs remain in the folder
+			-- If we still have "lastEggPosition," keep teleporting there
+			if lastEggPosition then
+				hrp.CFrame = CFrame.new(lastEggPosition - Vector3.new(0, lastEggDistance, 0))
+			end
 		end
+		
+		-- A small delay to prevent infinite busy looping.
+		wait(0.5)
 	end
 	
-	collecting = false
+	-- When "collecting" goes false (Disable clicked), reset button text
 	toggleButton.Text = "Enable"
 end
 
