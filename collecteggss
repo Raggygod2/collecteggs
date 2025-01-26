@@ -2,19 +2,11 @@ local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Utility function for "clicking" a ClickDetector locally:
--- Officially undocumented, but widely used:
-local function fireClickDetector(cd)
-	if cd and cd:IsA("ClickDetector") then
-		fireclickdetector(cd)
-	end
-end
-
-----------------------------------------------------------------------
--- 1) Create a simple GUI with: Frame, ToggleButton, CloseButton
-----------------------------------------------------------------------
+----------------------------------------------------------------------------
+-- 1) Create ScreenGui, Frame, ToggleButton, CloseButton
+----------------------------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "EggTeleportGui"
+screenGui.Name = "EggCollectorGui"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
@@ -46,110 +38,60 @@ closeButton.Text = "Close"
 closeButton.TextSize = 24
 closeButton.Parent = mainFrame
 
-----------------------------------------------------------------------
--- 2) Variables & Functions for handling the "hidden" teleports
-----------------------------------------------------------------------
-local teleporting = false
-local originalPosCFrame = nil
+----------------------------------------------------------------------------
+-- 2) Main logic: Using fireclickdetector() to collect eggs
+----------------------------------------------------------------------------
+local collecting = false
 
--- Teleports you locally (anchoring so the server does NOT replicate movement):
--- Then calls fireClickDetector on the model's ClickDetector.
-local function teleportAndCollect(eggModel)
-	local character = player.Character
-	if not character or not character:FindFirstChild("HumanoidRootPart") then return end
-
-	local eggPart = eggModel:FindFirstChild("Egg")
-	local clickDetector = eggModel:FindFirstChild("ClickDetector")
-	if not eggPart or not clickDetector then return end
-
-	-- Move your humanoid root locally (anchor so server won't see these changes)
-	character.HumanoidRootPart.Anchored = true
-	character.HumanoidRootPart.CFrame = eggPart.CFrame + Vector3.new(0, 3, 0)
-
-	-- "Click" the ClickDetector to collect
-	fireClickDetector(clickDetector)
-
-	-- Wait a bit so you can see the effect (adjust as needed)
-	wait(0.4)
-end
-
--- Primary routine for visiting all eggs
-local function teleportToAllEggs()
-	teleporting = true
+-- The function that runs when "Enable" is pressed
+local function collectEggs()
+	collecting = true
 	toggleButton.Text = "Disable"
-
-	local character = player.Character
-	if not character or not character:FindFirstChild("HumanoidRootPart") then
-		teleporting = false
-		toggleButton.Text = "Enable"
-		return
-	end
-
-	-- Save original position so we can restore it later
-	originalPosCFrame = character.HumanoidRootPart.CFrame
-
-	-- Get the folder where egg models are
+	
+	-- Reference: workspace.Eggs.Eggs
 	local eggsFolder = workspace:WaitForChild("Eggs"):WaitForChild("Eggs")
-
+	
+	-- Loop over the children (egg Models)
 	for _, eggModel in ipairs(eggsFolder:GetChildren()) do
-		if not teleporting then
-			break
-		end
-		if eggModel:IsA("Model") then
-			teleportAndCollect(eggModel)
+		if not collecting then break end -- Stop if disabled mid-way
+
+		-- Find a ClickDetector inside the model
+		local clickDetector = eggModel:FindFirstChild("ClickDetector")
+		if clickDetector and clickDetector:IsA("ClickDetector") then
+			-- Fire the clickdetector.  
+			-- This "clicks" it locally as if the player were near & clicked.
+			fireclickdetector(clickDetector)
+			
+			-- Short delay between each click (tweak if needed)
+			wait(0.2)
 		end
 	end
-
-	-- Return the character to original position
-	if character and character:FindFirstChild("HumanoidRootPart") then
-		character.HumanoidRootPart.CFrame = originalPosCFrame
-	end
-	-- Unanchor so you can move normally again
-	character.HumanoidRootPart.Anchored = false
-
-	teleporting = false
+	
+	collecting = false
 	toggleButton.Text = "Enable"
 end
 
-----------------------------------------------------------------------
--- 3) Connect Toggle & Close button logic
-----------------------------------------------------------------------
+----------------------------------------------------------------------------
+-- 3) Button Connections
+----------------------------------------------------------------------------
 toggleButton.MouseButton1Click:Connect(function()
-	local character = player.Character
-	if not character or not character:FindFirstChild("HumanoidRootPart") then
-		return
-	end
-
-	if teleporting then
-		-- Turn off mid-flight
-		teleporting = false
+	if collecting then
+		-- Disable if it's currently collecting
+		collecting = false
 		toggleButton.Text = "Enable"
-
-		-- Attempt to restore original position & unanchor
-		if originalPosCFrame then
-			character.HumanoidRootPart.CFrame = originalPosCFrame
-			character.HumanoidRootPart.Anchored = false
-		end
 	else
-		-- Start collecting
-		teleportToAllEggs()
+		-- Start the auto-collect routine
+		collectEggs()
 	end
 end)
 
 closeButton.MouseButton1Click:Connect(function()
-	-- If still teleporting, disable first
-	if teleporting then
-		teleporting = false
+	-- Stop collecting if still running
+	if collecting then
+		collecting = false
 		toggleButton.Text = "Enable"
-		
-		-- Attempt to restore original position & unanchor
-		local character = player.Character
-		if character and character:FindFirstChild("HumanoidRootPart") and originalPosCFrame then
-			character.HumanoidRootPart.CFrame = originalPosCFrame
-			character.HumanoidRootPart.Anchored = false
-		end
 	end
-
-	-- Then remove the GUI
+	
+	-- Remove the GUI
 	screenGui:Destroy()
 end)
