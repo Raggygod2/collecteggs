@@ -63,7 +63,7 @@ local function collectEggs()
 			fireclickdetector(clickDetector)
 			
 			-- Short delay between each click (tweak if needed)
-			wait(0.2)
+			wait(0.01)
 		end
 	end
 	
