@@ -2,94 +2,154 @@ local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Create ScreenGui
+-- Utility function for "clicking" a ClickDetector locally:
+-- Officially undocumented, but widely used:
+local function fireClickDetector(cd)
+	if cd and cd:IsA("ClickDetector") then
+		fireclickdetector(cd)
+	end
+end
+
+----------------------------------------------------------------------
+-- 1) Create a simple GUI with: Frame, ToggleButton, CloseButton
+----------------------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "EggTeleportGui"
-screenGui.ResetOnSpawn = false -- So it won't disappear on respawn (optional)
+screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
--- Create main frame
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 200, 0, 100)
-mainFrame.Position = UDim2.new(0.5, -100, 0.5, -50)
-mainFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+mainFrame.Size = UDim2.new(0, 250, 0, 120)
+mainFrame.Position = UDim2.new(0.5, -125, 0.5, -60)
+mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 mainFrame.BorderSizePixel = 2
-mainFrame.Active = true  -- required for dragging
-mainFrame.Draggable = true  -- basic built-in dragging
+mainFrame.Active = true
+mainFrame.Draggable = true
 mainFrame.Parent = screenGui
 
--- Create toggle button
 local toggleButton = Instance.new("TextButton")
 toggleButton.Name = "ToggleButton"
-toggleButton.Size = UDim2.new(0, 180, 0, 40)
+toggleButton.Size = UDim2.new(0, 230, 0, 50)
 toggleButton.Position = UDim2.new(0, 10, 0, 10)
-toggleButton.BackgroundColor3 = Color3.fromRGB(80, 170, 80)
-toggleButton.Text = "Enable Teleport"
+toggleButton.BackgroundColor3 = Color3.fromRGB(90, 160, 90)
+toggleButton.Text = "Enable"
+toggleButton.TextSize = 24
 toggleButton.Parent = mainFrame
 
--- Create close button
 local closeButton = Instance.new("TextButton")
 closeButton.Name = "CloseButton"
-closeButton.Size = UDim2.new(0, 180, 0, 30)
-closeButton.Position = UDim2.new(0, 10, 0, 60)
-closeButton.BackgroundColor3 = Color3.fromRGB(170, 80, 80)
+closeButton.Size = UDim2.new(0, 230, 0, 40)
+closeButton.Position = UDim2.new(0, 10, 0, 70)
+closeButton.BackgroundColor3 = Color3.fromRGB(160, 90, 90)
 closeButton.Text = "Close"
+closeButton.TextSize = 24
 closeButton.Parent = mainFrame
 
--- Variable to track if teleporting is enabled
+----------------------------------------------------------------------
+-- 2) Variables & Functions for handling the "hidden" teleports
+----------------------------------------------------------------------
 local teleporting = false
+local originalPosCFrame = nil
 
--- Function to start teleporting
-local function TeleportToAllEggs()
+-- Teleports you locally (anchoring so the server does NOT replicate movement):
+-- Then calls fireClickDetector on the model's ClickDetector.
+local function teleportAndCollect(eggModel)
+	local character = player.Character
+	if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+
+	local eggPart = eggModel:FindFirstChild("Egg")
+	local clickDetector = eggModel:FindFirstChild("ClickDetector")
+	if not eggPart or not clickDetector then return end
+
+	-- Move your humanoid root locally (anchor so server won't see these changes)
+	character.HumanoidRootPart.Anchored = true
+	character.HumanoidRootPart.CFrame = eggPart.CFrame + Vector3.new(0, 3, 0)
+
+	-- "Click" the ClickDetector to collect
+	fireClickDetector(clickDetector)
+
+	-- Wait a bit so you can see the effect (adjust as needed)
+	wait(0.4)
+end
+
+-- Primary routine for visiting all eggs
+local function teleportToAllEggs()
 	teleporting = true
-	toggleButton.Text = "Disable Teleport"
-	
-	-- Reference to the folder: workspace.Eggs.Eggs
+	toggleButton.Text = "Disable"
+
+	local character = player.Character
+	if not character or not character:FindFirstChild("HumanoidRootPart") then
+		teleporting = false
+		toggleButton.Text = "Enable"
+		return
+	end
+
+	-- Save original position so we can restore it later
+	originalPosCFrame = character.HumanoidRootPart.CFrame
+
+	-- Get the folder where egg models are
 	local eggsFolder = workspace:WaitForChild("Eggs"):WaitForChild("Eggs")
 
-	-- Iterate over all children in eggsFolder
 	for _, eggModel in ipairs(eggsFolder:GetChildren()) do
-		-- If teleporting was turned off mid-way, break the loop
 		if not teleporting then
 			break
 		end
-		
-		-- Ensure this is a Model, and it has a part named "Egg"
-		if eggModel:IsA("Model") and eggModel:FindFirstChild("Egg") then
-			local eggPart = eggModel.Egg
-			local character = player.Character
-			if character and character:FindFirstChild("HumanoidRootPart") then
-				-- Teleport the player a little above the egg to avoid clipping
-				character.HumanoidRootPart.CFrame = eggPart.CFrame + Vector3.new(0, 3, 0)
-				
-				-- Small delay so the player doesn't instantly skip all eggs
-				wait(1)
-			end
+		if eggModel:IsA("Model") then
+			teleportAndCollect(eggModel)
 		end
 	end
-	
-	-- After finishing, set teleporting to false if we didn't stop mid-way
+
+	-- Return the character to original position
+	if character and character:FindFirstChild("HumanoidRootPart") then
+		character.HumanoidRootPart.CFrame = originalPosCFrame
+	end
+	-- Unanchor so you can move normally again
+	character.HumanoidRootPart.Anchored = false
+
 	teleporting = false
-	toggleButton.Text = "Enable Teleport"
+	toggleButton.Text = "Enable"
 end
 
--- Toggle button logic
+----------------------------------------------------------------------
+-- 3) Connect Toggle & Close button logic
+----------------------------------------------------------------------
 toggleButton.MouseButton1Click:Connect(function()
+	local character = player.Character
+	if not character or not character:FindFirstChild("HumanoidRootPart") then
+		return
+	end
+
 	if teleporting then
-		-- If it's currently running, disable it
+		-- Turn off mid-flight
 		teleporting = false
-		toggleButton.Text = "Enable Teleport"
+		toggleButton.Text = "Enable"
+
+		-- Attempt to restore original position & unanchor
+		if originalPosCFrame then
+			character.HumanoidRootPart.CFrame = originalPosCFrame
+			character.HumanoidRootPart.Anchored = false
+		end
 	else
-		-- Start teleporting to all eggs
-		TeleportToAllEggs()
+		-- Start collecting
+		teleportToAllEggs()
 	end
 end)
 
--- Close button logic
 closeButton.MouseButton1Click:Connect(function()
-	-- Disable teleporting first
-	teleporting = false
-	-- Remove the GUI
+	-- If still teleporting, disable first
+	if teleporting then
+		teleporting = false
+		toggleButton.Text = "Enable"
+		
+		-- Attempt to restore original position & unanchor
+		local character = player.Character
+		if character and character:FindFirstChild("HumanoidRootPart") and originalPosCFrame then
+			character.HumanoidRootPart.CFrame = originalPosCFrame
+			character.HumanoidRootPart.Anchored = false
+		end
+	end
+
+	-- Then remove the GUI
 	screenGui:Destroy()
 end)
