@@ -1,0 +1,112 @@
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+---------------------------------------------------------------------------- 
+-- 1) Create ScreenGui, Frame, ToggleButton, CloseButton
+---------------------------------------------------------------------------- 
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "EggCollectorGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 250, 0, 120)
+mainFrame.Position = UDim2.new(0.5, -125, 0.5, -60)
+mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+mainFrame.BorderSizePixel = 2
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Name = "ToggleButton"
+toggleButton.Size = UDim2.new(0, 230, 0, 50)
+toggleButton.Position = UDim2.new(0, 10, 0, 10)
+toggleButton.BackgroundColor3 = Color3.fromRGB(90, 160, 90)
+toggleButton.Text = "Enable"
+toggleButton.TextSize = 24
+toggleButton.Parent = mainFrame
+
+local closeButton = Instance.new("TextButton")
+closeButton.Name = "CloseButton"
+closeButton.Size = UDim2.new(0, 230, 0, 40)
+closeButton.Position = UDim2.new(0, 10, 0, 70)
+closeButton.BackgroundColor3 = Color3.fromRGB(160, 90, 90)
+closeButton.Text = "Close"
+closeButton.TextSize = 24
+closeButton.Parent = mainFrame
+
+---------------------------------------------------------------------------- 
+-- 2) Main logic: Using fireclickdetector() to collect eggs
+--    + Now also teleporting below each egg at ClickDetector.MaxActivationDistance
+---------------------------------------------------------------------------- 
+local collecting = false
+
+local function collectEggs()
+	collecting = true
+	toggleButton.Text = "Disable"
+	
+	-- Reference: workspace.Eggs.Eggs
+	local eggsFolder = workspace:WaitForChild("Eggs"):WaitForChild("Eggs")
+	
+	local character = player.Character or player.CharacterAdded:Wait()
+	local hrp = character:WaitForChild("HumanoidRootPart")
+	
+	-- Loop over the children (egg Models)
+	for _, eggModel in ipairs(eggsFolder:GetChildren()) do
+		if not collecting then break end -- Stop if disabled mid-way
+
+		-- Find a ClickDetector inside the model
+		local clickDetector = eggModel:FindFirstChild("ClickDetector")
+		if clickDetector and clickDetector:IsA("ClickDetector") then
+			
+			-- Teleport below the egg at the maximum activation distance
+			local part = eggModel.PrimaryPart or eggModel:FindFirstChildWhichIsA("BasePart")
+			if part then
+				local maxDistance = clickDetector.MaxActivationDistance
+				local eggPos = part.Position
+				-- Teleport the player
+				hrp.CFrame = CFrame.new(eggPos - Vector3.new(0, maxDistance + 0.1, 0))
+				
+				-- Small delay to ensure the server registers the new position 
+				wait(0.15)
+			end
+			
+			-- "Click" it locally
+			fireclickdetector(clickDetector)
+			
+			-- Short delay between each click (tweak if needed)
+			wait(0.01)
+		end
+	end
+	
+	collecting = false
+	toggleButton.Text = "Enable"
+end
+
+---------------------------------------------------------------------------- 
+-- 3) Button Connections
+---------------------------------------------------------------------------- 
+toggleButton.MouseButton1Click:Connect(function()
+	if collecting then
+		-- Disable if it's currently collecting
+		collecting = false
+		toggleButton.Text = "Enable"
+	else
+		-- Start the auto-collect routine
+		collectEggs()
+	end
+end)
+
+closeButton.MouseButton1Click:Connect(function()
+	-- Stop collecting if still running
+	if collecting then
+		collecting = false
+		toggleButton.Text = "Enable"
+	end
+	
+	-- Remove the GUI
+	screenGui:Destroy()
+end)
